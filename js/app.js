@@ -1,11 +1,8 @@
 import * as tz from "./tz.js";
 
-const STORAGE_KEY = "timefriendzone:v1";
+const STORAGE_KEY = "timefriendzone:v2";
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-const LOCALE = navigator.language || "en";
-const DEVICE_HOUR12 = /^h1[12]$/.test(
-  new Intl.DateTimeFormat(LOCALE, { hour: "numeric" }).resolvedOptions().hourCycle ?? "",
-);
+const BROWSER_LOCALE = navigator.language || "en";
 
 const ZONES = (() => {
   const zones = Intl.supportedValuesOf?.("timeZone") ?? [];
@@ -15,19 +12,24 @@ const ZONES = (() => {
 const $ = (selector) => document.querySelector(selector);
 
 const state = {
-  title: "",
+  settings: { ...tz.DEFAULT_SETTINGS },
   people: [],
-  hour12: null, // null = follow the device
   date: "", // YYYY-MM-DD in the reference (first) person's zone
   selected: null, // instant of the selected column
   source: "saved", // "saved" | "link"
-  defaults: { title: "", people: [] },
+  defaults: { settings: { ...tz.DEFAULT_SETTINGS }, people: [] }, // from config.json
 };
 
 // ----------------------------------------------------------------- helpers
 
 const ref = () => state.people[0] ?? { name: "You", tz: LOCAL_TZ };
-const useHour12 = () => state.hour12 ?? DEVICE_HOUR12;
+const locale = () => state.settings.lang || BROWSER_LOCALE;
+
+function useHour12() {
+  if (state.settings.hour12 !== null) return state.settings.hour12;
+  const cycle = new Intl.DateTimeFormat(locale(), { hour: "numeric" }).resolvedOptions().hourCycle;
+  return cycle === "h11" || cycle === "h12";
+}
 
 function escapeHtml(text) {
   return String(text).replace(
@@ -38,10 +40,10 @@ function escapeHtml(text) {
 
 const formatters = new Map();
 function format(instant, timeZone, options) {
-  const key = JSON.stringify([timeZone, options, useHour12()]);
+  const key = JSON.stringify([timeZone, options, useHour12(), locale()]);
   let formatter = formatters.get(key);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat(LOCALE, { timeZone, hour12: useHour12(), ...options });
+    formatter = new Intl.DateTimeFormat(locale(), { timeZone, hour12: useHour12(), ...options });
     formatters.set(key, formatter);
   }
   return formatter.format(instant);
@@ -65,6 +67,15 @@ function statusText(status) {
   if (status.night) return "night";
   if (status.weekend) return "day off";
   return "off work";
+}
+
+function weekdayNames(style) {
+  const monday = Date.UTC(2024, 0, 1, 12);
+  return [1, 2, 3, 4, 5, 6, 7].map((d) =>
+    new Intl.DateTimeFormat(locale(), { weekday: style, timeZone: "UTC" }).format(
+      monday + (d - 1) * tz.DAY,
+    ),
+  );
 }
 
 let toastTimer;
@@ -96,19 +107,19 @@ function download(filename, text, type) {
 
 // ------------------------------------------------------------- persistence
 
-function teamSnapshot() {
-  return { title: state.title, people: state.people, hour12: state.hour12 };
+function fragment(at = null) {
+  return tz.encodeState({ settings: state.settings, people: state.people, at }, [
+    tz.DEFAULT_SETTINGS,
+    state.defaults.settings,
+  ]);
 }
 
 function readSaved() {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-    if (!raw || !Array.isArray(raw.people)) return null;
-    return {
-      title: typeof raw.title === "string" ? raw.title : "",
-      people: raw.people.map((p) => tz.normalizePerson(p, LOCAL_TZ)).filter(Boolean),
-      hour12: typeof raw.hour12 === "boolean" ? raw.hour12 : null,
-    };
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === null) return null;
+    const decoded = tz.decodeState(saved, LOCAL_TZ, state.defaults.settings);
+    return { settings: decoded.settings, people: decoded.people ?? [] };
   } catch {
     return null;
   }
@@ -116,27 +127,22 @@ function readSaved() {
 
 function writeSaved() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(teamSnapshot()));
+    localStorage.setItem(STORAGE_KEY, fragment());
   } catch {
-    // Storage can be unavailable (private mode); the link still holds the team.
+    // Storage can be unavailable (private mode); the link still holds everything.
   }
-}
-
-function sameTeam(a, b) {
-  return tz.encodeState({ ...a, hour12: null }) === tz.encodeState({ ...b, hour12: null });
 }
 
 /** Mirror state into the URL (always) and local storage (own team only). */
 function persist() {
-  const fragment = tz.encodeState(teamSnapshot());
-  history.replaceState(null, "", fragment ? `#${fragment}` : location.pathname + location.search);
+  const text = fragment();
+  history.replaceState(null, "", text ? `#${text}` : location.pathname + location.search);
   if (state.source === "saved") writeSaved();
 }
 
-function applyTeam(team) {
-  state.title = team.title ?? "";
-  state.people = team.people;
-  state.hour12 = team.hour12 ?? null;
+function applyState({ settings, people }) {
+  state.settings = { ...settings };
+  state.people = people.map((p) => ({ ...p }));
   formatters.clear();
 }
 
@@ -145,36 +151,53 @@ async function loadDefaults() {
     const response = await fetch("config.json", { cache: "no-cache" });
     const config = await response.json();
     return {
-      title: typeof config.title === "string" ? config.title : "",
+      settings: tz.parseSettings(config.settings ?? {}),
       people: (config.people ?? []).map((p) => tz.normalizePerson(p, LOCAL_TZ)).filter(Boolean),
-      hour12: typeof config.hour12 === "boolean" ? config.hour12 : null,
     };
   } catch {
-    return { title: "", people: [tz.normalizePerson({ name: "Me", tz: "auto" }, LOCAL_TZ)] };
+    return {
+      settings: { ...tz.DEFAULT_SETTINGS },
+      people: [tz.normalizePerson({ name: "Me", tz: "auto" }, LOCAL_TZ)],
+    };
   }
 }
 
 function loadFromLocation() {
-  const linked = tz.decodeState(location.hash, LOCAL_TZ);
+  const hasFragment = location.hash.length > 1;
   const saved = readSaved();
-  if (linked.people) {
-    applyTeam({ title: linked.title, people: linked.people, hour12: linked.hour12 });
-    state.source = saved && !sameTeam(saved, linked) ? "link" : "saved";
-  } else if (saved) {
-    applyTeam(saved);
-    state.source = "saved";
+  const base = saved ?? state.defaults;
+  // A link with people is self-contained (over the host defaults). A link
+  // with only settings, e.g. "#theme=dark", tweaks the viewer's own team.
+  const hasPeople = tz.decodeState(location.hash, LOCAL_TZ).people !== null;
+  const linked = tz.decodeState(
+    location.hash,
+    LOCAL_TZ,
+    hasPeople ? state.defaults.settings : base.settings,
+  );
+  if (hasFragment) {
+    applyState({ settings: linked.settings, people: linked.people ?? base.people });
+    const differs = saved && fragment() !== tz.encodeState(saved, [tz.DEFAULT_SETTINGS, state.defaults.settings]);
+    state.source = differs ? "link" : "saved";
   } else {
-    applyTeam(state.defaults);
+    applyState(saved ?? state.defaults);
     state.source = "saved";
   }
   state.selected = linked.at;
-  state.date = tz.dateInZone(linked.at ?? Date.now(), ref().tz);
+  state.date = dateFor(linked.at ?? Date.now());
 }
 
-// ---------------------------------------------------------------- rendering
+// ------------------------------------------------------------------ dates
+
+/** The timeline date (reference zone) whose columns contain `instant`. */
+function dateFor(instant) {
+  const zone = ref().tz;
+  const date = tz.dateInZone(instant, zone);
+  const start = tz.wallTimeToInstant(date, state.settings.from * 60, zone);
+  return instant < start ? tz.addDays(date, -1) : date;
+}
 
 function columns() {
-  return tz.dayColumns(state.date, ref().tz);
+  return tz.dayColumns(state.date, ref().tz, state.settings.from * 60);
 }
 
 function currentColumn(cols) {
@@ -182,25 +205,63 @@ function currentColumn(cols) {
   return cols.findIndex((t) => now >= t && now < t + tz.HOUR);
 }
 
+// -------------------------------------------------------------- appearance
+
+function applyAppearance() {
+  const s = state.settings;
+  const root = document.documentElement;
+  root.dataset.theme = s.theme;
+  root.dataset.font = s.font;
+  root.lang = locale();
+  $('meta[name="color-scheme"]').content = s.theme === "auto" ? "light dark" : s.theme;
+
+  const colors = [
+    [s.accent, "--accent", "--accent-text"],
+    [s.workColor, "--work-bg", "--work-text"],
+    [s.awakeColor, "--off-bg", "--off-text"],
+    [s.nightColor, "--night-bg", "--night-text"],
+  ];
+  for (const [color, bgVar, textVar] of colors) {
+    if (color) {
+      root.style.setProperty(bgVar, color);
+      root.style.setProperty(textVar, tz.readableTextColor(color));
+    } else {
+      root.style.removeProperty(bgVar);
+      root.style.removeProperty(textVar);
+    }
+  }
+  // A custom accent tints the working-hour cells; keep their text neutral so
+  // it stays readable whatever the accent is.
+  if (s.accent && !s.workColor) root.style.setProperty("--work-text", "var(--text)");
+
+  $("#legend-night").textContent =
+    `Night (${tz.formatHM(s.nightStart)}–${tz.formatHM(s.nightEnd)})`;
+}
+
+// ---------------------------------------------------------------- rendering
+
 function renderHeader() {
-  const title = state.title || "TimeFriendZone";
+  const title = state.settings.title || "TimeFriendZone";
   $("#title").textContent = title;
-  document.title = state.title ? `${state.title} · TimeFriendZone` : "TimeFriendZone";
+  document.title = state.settings.title ? `${state.settings.title} · TimeFriendZone` : "TimeFriendZone";
   $("#date").value = state.date;
-  $("#today").disabled = state.date === tz.dateInZone(Date.now(), ref().tz);
+  $("#today").disabled = state.date === dateFor(Date.now());
   $("#shared-banner").hidden = state.source !== "link";
 }
 
 function personHeader(person, index, now) {
   const offset = tz.offsetMinutes(now, person.tz);
   const diff = offset - tz.offsetMinutes(now, ref().tz);
-  const status = tz.slotStatus(now, person);
+  const status = tz.slotStatus(now, person, state.settings);
+  const hours = tz.effectiveHours(person, state.settings);
   const name = escapeHtml(person.name);
-  const workDays = person.days.length === 7 ? "every day" : `${person.days.length} days/week`;
+  const dayNames = weekdayNames("long");
+  const workDays =
+    hours.days.length === 7 ? "every day" : [...hours.days].map((d) => dayNames[d - 1]).join(", ") || "no days";
   return `
     <th scope="row" class="person">
       <div class="person-line">
-        <span class="person-name">${name}</span>
+        <span class="person-name" title="${name}">${name}</span>
         <span class="person-actions">
           <button type="button" class="mini" data-action="edit" data-index="${index}" aria-label="Edit ${name}" title="Edit">✎</button>
           ${
@@ -220,35 +281,38 @@ function personHeader(person, index, now) {
         <span class="clock">${escapeHtml(fmtTime(now, person.tz))}</span>
         <span class="status status-${status.working ? "work" : status.night ? "night" : "off"}">${statusText(status)}</span>
       </div>
-      <span class="sr-only">Works ${tz.formatHM(person.start)}–${tz.formatHM(person.end)} local time, ${workDays}.</span>
+      <span class="sr-only">Works ${tz.formatHM(hours.start)}–${tz.formatHM(hours.end)} local time on ${escapeHtml(workDays)}.</span>
     </th>`;
 }
 
 function renderGrid() {
   const cols = columns();
   const people = state.people;
-  const counts = tz.availability(cols, people);
+  const counts = tz.availability(cols, people, state.settings);
   const nowCol = currentColumn(cols);
   const now = Date.now();
   const refZone = ref().tz;
   const selectedCol = cols.indexOf(state.selected);
-  const focusCol = selectedCol >= 0 ? selectedCol : nowCol >= 0 ? nowCol : 9;
+  const fallbackCol = cols.findIndex((t) => tz.zonedParts(t, refZone).hour === 9);
+  const focusCol = selectedCol >= 0 ? selectedCol : nowCol >= 0 ? nowCol : Math.max(0, fallbackCol);
   const nowStyle =
     nowCol >= 0 ? ` style="--now-pos:${(((now - cols[nowCol]) / tz.HOUR) * 100).toFixed(1)}%"` : "";
 
   const headCells = cols
     .map((t, i) => {
       const n = counts[i];
-      const level = people.length === 0 ? 0 : n / people.length;
-      const label = `${fmtTime(t, refZone)} ${tz.cityName(refZone)}: ${n} of ${people.length} working`;
-      const classes = ["slot", level === 1 ? "all" : level >= 0.5 ? "most" : n > 0 ? "some" : "none"];
+      const total = people.length;
+      const level = total === 0 ? 0 : n / total;
+      const label = `${fmtTime(t, refZone)} ${tz.cityName(refZone)}: ${n} of ${total} working`;
+      const classes = ["slot", total > 0 && n === total ? "all" : n > 0 ? "some" : "none"];
       if (i === nowCol) classes.push("now");
       if (i === selectedCol) classes.push("selected");
+      const text = total > 0 && n === total ? "All" : n > 0 ? String(n) : "";
       return `<th scope="col" class="${classes.join(" ")}"${i === nowCol ? nowStyle : ""}>
         <button type="button" class="slot-button" data-col="${i}" tabindex="${i === focusCol ? 0 : -1}"
-          aria-pressed="${i === selectedCol}" aria-label="${escapeHtml(label)}">
-          <span class="count" aria-hidden="true">${n}</span>
+          aria-pressed="${i === selectedCol}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
           <span class="bar" aria-hidden="true" style="--level:${level}"></span>
+          <span class="count" aria-hidden="true">${text}</span>
         </button>
       </th>`;
     })
@@ -258,7 +322,7 @@ function renderGrid() {
     .map((person, index) => {
       const cells = cols
         .map((t, i) => {
-          const status = tz.slotStatus(t, person);
+          const status = tz.slotStatus(t, person, state.settings);
           const { parts } = status;
           const classes = ["cell"];
           if (status.working) classes.push("work");
@@ -279,7 +343,7 @@ function renderGrid() {
     })
     .join("");
 
-  const caption = `Local times for each person on ${fmtLongDate(cols[0], refZone)}, one column per hour of ${tz.cityName(refZone)} time.`;
+  const caption = `Local times for each person from ${fmtLongDate(cols[0], refZone)}, one column per hour of ${tz.cityName(refZone)} time. The first row counts how many people are working.`;
   const empty =
     people.length === 0
       ? `<tr><td class="empty" colspan="${cols.length + 1}">Nobody here yet. Use “Add person” to start with yourself.</td></tr>`
@@ -287,7 +351,7 @@ function renderGrid() {
 
   $("#grid").innerHTML = `
     <caption class="sr-only">${escapeHtml(caption)}</caption>
-    <thead><tr><th scope="col" class="corner"><span>Available</span><small>${escapeHtml(fmtDay(cols[0], refZone))}</small></th>${headCells}</tr></thead>
+    <thead><tr><th scope="col" class="corner"><span>Working</span><small>${escapeHtml(fmtDay(cols[0], refZone))}</small></th>${headCells}</tr></thead>
     <tbody>${rows}${empty}</tbody>`;
 
   renderBest(cols, counts);
@@ -326,7 +390,7 @@ function selectionSummary() {
   const end = start + tz.HOUR;
   const zone = ref().tz;
   const lines = state.people.map((person) => {
-    const status = tz.slotStatus(start, person);
+    const status = tz.slotStatus(start, person, state.settings);
     return {
       person,
       status,
@@ -385,19 +449,19 @@ function focusSelector() {
 
 function render() {
   const selector = focusSelector();
+  applyAppearance();
   renderHeader();
   renderGrid();
   renderSelection();
   if (selector) $(selector)?.focus({ preventScroll: true });
 }
 
-/** Scroll the timeline so the selected or current hour is in view. */
+/** Scroll the timeline so the selected or current hour is centred. */
 function scrollToFocusColumn() {
   const scroller = $("#grid-scroll");
   const target = $(".slot-button[tabindex='0']")?.closest("th");
   const sticky = $("#grid .corner");
   if (!target || !sticky) return;
-  // Centre the column in the area right of the sticky name column.
   const visible = scroller.clientWidth - sticky.offsetWidth;
   const left = target.offsetLeft - sticky.offsetWidth - (visible - target.offsetWidth) / 2;
   scroller.scrollLeft = Math.max(0, left);
@@ -425,53 +489,90 @@ function setDate(dateStr) {
     selectedMinutes = p.hour * 60 + p.minute;
   }
   state.date = dateStr;
-  state.selected =
-    selectedMinutes === null ? null : tz.wallTimeToInstant(dateStr, selectedMinutes, ref().tz);
+  state.selected = null;
+  if (selectedMinutes !== null) {
+    const candidate = tz.wallTimeToInstant(dateStr, selectedMinutes, ref().tz);
+    const cols = columns();
+    // With a late timeline start, early hours belong to the next calendar day.
+    const next = tz.wallTimeToInstant(tz.addDays(dateStr, 1), selectedMinutes, ref().tz);
+    state.selected = cols.includes(candidate) ? candidate : cols.includes(next) ? next : null;
+  }
   render();
   scrollToFocusColumn();
 }
 
-function changeTeam(mutator) {
+/** Apply a change to settings or team, keeping the visible day sensible. */
+function change(mutator) {
   const refZoneBefore = ref().tz;
+  const fromBefore = state.settings.from;
+  const anchor = state.selected ?? columns()[0] + 12 * tz.HOUR;
   mutator();
-  if (ref().tz !== refZoneBefore) {
-    // The reference zone changed: re-anchor the visible day on the same instant.
-    const anchor = state.selected ?? columns()[0];
-    state.date = tz.dateInZone(anchor ?? Date.now(), ref().tz);
+  formatters.clear();
+  if (ref().tz !== refZoneBefore || state.settings.from !== fromBefore) {
+    state.date = dateFor(anchor);
     if (state.selected !== null && !columns().includes(state.selected)) state.selected = null;
   }
   persist();
   render();
 }
 
+// --------------------------------------------------------------- day boxes
+
+function dayBoxes(container, name) {
+  const short = weekdayNames("short");
+  const long = weekdayNames("long");
+  container.innerHTML = short
+    .map(
+      (label, i) =>
+        `<label class="day-box"><input type="checkbox" name="${name}" value="${i + 1}" aria-label="${escapeHtml(long[i])}"><span aria-hidden="true">${escapeHtml(label)}</span></label>`,
+    )
+    .join("");
+}
+
+function readDays(form, name) {
+  return [...form.querySelectorAll(`input[name='${name}']:checked`)].map((b) => b.value).join("");
+}
+
+function writeDays(form, name, days) {
+  for (const box of form.querySelectorAll(`input[name='${name}']`)) box.checked = days.includes(box.value);
+}
+
 // ------------------------------------------------------------ person dialog
 
 let editingIndex = null;
 
+function syncPersonDefaultToggle() {
+  const form = $("#person-form");
+  const useDefault = form.elements.useDefault.checked;
+  $("#person-hours").disabled = useDefault;
+  if (useDefault) {
+    form.elements.start.value = tz.toTimeInput(state.settings.workStart);
+    form.elements.end.value = tz.toTimeInput(state.settings.workEnd);
+    writeDays(form, "day", state.settings.workDays);
+  }
+}
+
 function openPersonDialog(index = null) {
   editingIndex = index;
-  const dialog = $("#person-dialog");
   const form = $("#person-form");
   const person =
     index === null
-      ? {
-          name: state.people.length === 0 ? "Me" : "",
-          tz: state.people.length === 0 ? LOCAL_TZ : "",
-          start: tz.DEFAULT_START,
-          end: tz.DEFAULT_END,
-          days: tz.DEFAULT_DAYS,
-        }
+      ? { name: state.people.length === 0 ? "Me" : "", tz: state.people.length === 0 ? LOCAL_TZ : "" }
       : state.people[index];
+  const hours = tz.effectiveHours(person, state.settings);
   $("#person-dialog-title").textContent = index === null ? "Add person" : `Edit ${person.name}`;
+  dayBoxes($("#day-boxes"), "day");
   form.elements.name.value = person.name;
   form.elements.tz.value = person.tz;
-  form.elements.start.value = tz.toTimeInput(person.start);
-  form.elements.end.value = tz.toTimeInput(person.end);
-  for (const box of form.querySelectorAll("input[name='day']")) {
-    box.checked = person.days.includes(box.value);
-  }
+  form.elements.useDefault.checked = person.start === undefined && person.days === undefined;
+  form.elements.start.value = tz.toTimeInput(hours.start);
+  form.elements.end.value = tz.toTimeInput(hours.end);
+  writeDays(form, "day", hours.days);
+  $("#team-default-label").textContent =
+    `Use the team default (${tz.formatHM(state.settings.workStart)}–${tz.formatHM(state.settings.workEnd)})`;
+  syncPersonDefaultToggle();
   $("#person-error").textContent = "";
-  dialog.showModal();
+  $("#person-dialog").showModal();
   form.elements.name.focus();
 }
 
@@ -481,7 +582,6 @@ function savePersonFromForm() {
   const zone = tz.resolveTimeZone(form.elements.tz.value, ZONES);
   const start = tz.fromTimeInput(form.elements.start.value);
   const end = tz.fromTimeInput(form.elements.end.value);
-  const days = [...form.querySelectorAll("input[name='day']:checked")].map((b) => b.value).join("");
   const error = (message, field) => {
     $("#person-error").textContent = message;
     field?.focus();
@@ -494,10 +594,12 @@ function savePersonFromForm() {
       form.elements.tz,
     );
   }
-  if (start === null || end === null) return error("Please enter working hours.", form.elements.start);
-
-  const person = tz.normalizePerson({ name, tz: zone, start, end, days }, LOCAL_TZ);
-  changeTeam(() => {
+  const person = { name: name.slice(0, 80), tz: zone };
+  if (!form.elements.useDefault.checked) {
+    if (start === null || end === null) return error("Please enter working hours.", form.elements.start);
+    Object.assign(person, { start, end, days: readDays(form, "day") });
+  }
+  change(() => {
     if (editingIndex === null) state.people.push(person);
     else state.people[editingIndex] = person;
   });
@@ -506,72 +608,156 @@ function savePersonFromForm() {
 }
 
 function setupPersonDialog() {
-  const box = $("#day-boxes");
-  const monday = Date.UTC(2024, 0, 1, 12);
-  box.innerHTML = [1, 2, 3, 4, 5, 6, 7]
-    .map((d) => {
-      const t = monday + (d - 1) * tz.DAY;
-      const short = new Intl.DateTimeFormat(LOCALE, { weekday: "short", timeZone: "UTC" }).format(t);
-      const long = new Intl.DateTimeFormat(LOCALE, { weekday: "long", timeZone: "UTC" }).format(t);
-      return `<label class="day-box"><input type="checkbox" name="day" value="${d}" aria-label="${long}"><span aria-hidden="true">${short}</span></label>`;
-    })
-    .join("");
-
   $("#zones").innerHTML = [
     ...ZONES.map((zone) => `<option value="${zone}">${escapeHtml(tz.cityName(zone))}</option>`),
     ...Object.entries(tz.CITY_ALIASES)
       .filter(([, zone]) => zone !== "UTC")
-      .map(([city, zone]) => `<option value="${zone}">${escapeHtml(city.replace(/\b\w/g, (c) => c.toUpperCase()))}</option>`),
+      .map(
+        ([city, zone]) =>
+          `<option value="${zone}">${escapeHtml(city.replace(/\b\w/g, (c) => c.toUpperCase()))}</option>`,
+      ),
   ].join("");
 
-  $("#person-form").addEventListener("submit", (event) => {
+  const form = $("#person-form");
+  form.elements.useDefault.addEventListener("change", syncPersonDefaultToggle);
+  form.addEventListener("submit", (event) => {
     if (event.submitter?.value === "save" && !savePersonFromForm()) event.preventDefault();
   });
 }
 
 // ---------------------------------------------------------- settings dialog
 
+const COLOR_FIELDS = {
+  accent: { setting: "accent", cssVar: "--accent" },
+  workColor: { setting: "workColor", cssVar: "--work-bg" },
+  awakeColor: { setting: "awakeColor", cssVar: "--off-bg" },
+  nightColor: { setting: "nightColor", cssVar: "--night-bg" },
+};
+
+/** Current computed colour of a CSS variable as #rrggbb (for colour inputs). */
+function computedHex(cssVar) {
+  // Painting the colour onto a canvas handles every CSS colour syntax,
+  // including color-mix() results.
+  const probe = document.createElement("span");
+  probe.style.color = `var(${cssVar})`;
+  document.body.append(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  const ctx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d");
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function fillSettingsForm() {
+  const form = $("#settings-form");
+  const s = state.settings;
+  form.elements.title.value = s.title;
+  form.elements.hour12.value = s.hour12 === null ? "auto" : s.hour12 ? "12" : "24";
+  form.elements.lang.value = s.lang;
+  form.elements.lang.placeholder = BROWSER_LOCALE;
+  form.elements.theme.value = s.theme;
+  form.elements.font.value = s.font;
+  form.elements.from.value = String(s.from);
+  form.elements.nightStart.value = tz.toTimeInput(s.nightStart);
+  form.elements.nightEnd.value = tz.toTimeInput(s.nightEnd);
+  form.elements.workStart.value = tz.toTimeInput(s.workStart);
+  form.elements.workEnd.value = tz.toTimeInput(s.workEnd);
+  dayBoxes($("#work-day-boxes"), "workDay");
+  writeDays(form, "workDay", s.workDays);
+  for (const [field, { setting, cssVar }] of Object.entries(COLOR_FIELDS)) {
+    form.elements[field].value = s[setting] || computedHex(cssVar);
+    form.querySelector(`[data-reset="${field}"]`).disabled = !s[setting];
+  }
+}
+
+function readSettingsForm(changedField) {
+  const form = $("#settings-form");
+  const value = (name) => form.elements[name].value;
+  const minutes = (name, fallback) => tz.fromTimeInput(value(name)) ?? fallback;
+  const s = state.settings;
+  const lang = value("lang").trim();
+  const next = {
+    ...s,
+    title: value("title").trim().slice(0, 120),
+    hour12: value("hour12") === "auto" ? null : value("hour12") === "12",
+    lang: lang === "" || tz.parseSettings({ lang }).lang === lang ? lang : s.lang,
+    theme: value("theme"),
+    font: value("font"),
+    from: Number(value("from")),
+    nightStart: minutes("nightStart", s.nightStart),
+    nightEnd: minutes("nightEnd", s.nightEnd),
+    workStart: minutes("workStart", s.workStart),
+    workEnd: minutes("workEnd", s.workEnd),
+    workDays: readDays(form, "workDay"),
+  };
+  // Only a colour the user actually touched becomes custom.
+  if (COLOR_FIELDS[changedField]) {
+    next[COLOR_FIELDS[changedField].setting] = tz.parseColor(value(changedField));
+  }
+  return next;
+}
+
 function setupSettingsDialog() {
   const dialog = $("#settings-dialog");
   const form = $("#settings-form");
 
+  for (let h = 0; h < 24; h++) {
+    form.elements.from.add(new Option(`${String(h).padStart(2, "0")}:00`, String(h)));
+  }
+  $("#locales").innerHTML = [
+    "en-GB", "en-US", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pt-BR", "pt-PT", "sv-SE",
+    "da-DK", "nb-NO", "fi-FI", "pl-PL", "cs-CZ", "uk-UA", "tr-TR", "ja-JP", "ko-KR", "zh-CN",
+    "hi-IN", "ar-EG", "he-IL",
+  ]
+    .map((l) => `<option value="${l}"></option>`)
+    .join("");
+
   $("#open-settings").addEventListener("click", () => {
-    form.elements.title.value = state.title;
-    form.elements.hour12.value = state.hour12 === null ? "auto" : state.hour12 ? "12" : "24";
+    fillSettingsForm();
     dialog.showModal();
   });
 
-  form.elements.title.addEventListener("input", () => {
-    state.title = form.elements.title.value.trim();
-    persist();
-    renderHeader();
+  const onEdit = (event) => {
+    const field = event.target.name;
+    if (!field) return;
+    if (field === "lang" && event.type === "input") return; // wait for change
+    change(() => {
+      state.settings = readSettingsForm(field);
+    });
+    if (field === "lang" || field === "theme") fillSettingsForm();
+    if (COLOR_FIELDS[field]) form.querySelector(`[data-reset="${field}"]`).disabled = false;
+  };
+  form.addEventListener("input", onEdit);
+  form.addEventListener("change", onEdit);
+
+  form.addEventListener("click", (event) => {
+    const field = event.target.closest("[data-reset]")?.dataset.reset;
+    if (!field) return;
+    change(() => {
+      state.settings[COLOR_FIELDS[field].setting] = "";
+    });
+    fillSettingsForm();
   });
 
-  form.elements.hour12.addEventListener("change", () => {
-    const value = form.elements.hour12.value;
-    state.hour12 = value === "auto" ? null : value === "12";
-    formatters.clear();
+  $("#copy-link").addEventListener("click", () => {
     persist();
-    render();
+    copyText(location.href, "Link copied. It reproduces this exact view, settings included.");
   });
 
   $("#sort-team").addEventListener("click", () => {
     const now = Date.now();
-    changeTeam(() => {
+    change(() => {
       state.people.sort((a, b) => tz.offsetMinutes(now, a.tz) - tz.offsetMinutes(now, b.tz));
     });
     toast("Team sorted from west to east.");
   });
 
   $("#export-team").addEventListener("click", () => {
-    const people = state.people.map((p) => ({
-      name: p.name,
-      tz: p.tz,
-      hours: tz.formatHours(p.start, p.end),
-      days: p.days,
-    }));
-    const json = JSON.stringify({ title: state.title, people }, null, 2);
-    download("team.json", `${json}\n`, "application/json");
+    const settings = Object.fromEntries(tz.settingsToParams(state.settings));
+    const json = JSON.stringify({ settings, people: state.people.map(tz.personToJson) }, null, 2);
+    download("config.json", `${json}\n`, "application/json");
   });
 
   $("#import-team").addEventListener("change", async (event) => {
@@ -582,21 +768,30 @@ function setupSettingsDialog() {
       const data = JSON.parse(await file.text());
       const people = (data.people ?? []).map((p) => tz.normalizePerson(p, LOCAL_TZ)).filter(Boolean);
       if (people.length === 0) throw new Error("no people");
-      changeTeam(() => {
+      change(() => {
         state.people = people;
-        if (typeof data.title === "string") state.title = data.title;
+        if (data.settings) state.settings = tz.parseSettings(data.settings);
       });
-      form.elements.title.value = state.title;
+      fillSettingsForm();
       toast(`Imported ${people.length} people.`);
     } catch {
       toast("That file does not look like an exported team.");
     }
   });
 
+  $("#reset-settings").addEventListener("click", () => {
+    change(() => {
+      state.settings = { ...state.defaults.settings };
+    });
+    fillSettingsForm();
+    toast("Settings reset to the defaults.");
+  });
+
   $("#reset-team").addEventListener("click", () => {
     if (!window.confirm("Replace your team with the default team? This cannot be undone.")) return;
-    changeTeam(() => applyTeam(structuredClone(state.defaults)));
-    form.elements.title.value = state.title;
+    change(() => {
+      state.people = state.defaults.people.map((p) => ({ ...p }));
+    });
     toast("Team reset to the default.");
   });
 }
@@ -608,15 +803,14 @@ function setupEvents() {
   $("#next-day").addEventListener("click", () => setDate(tz.addDays(state.date, 1)));
   $("#today").addEventListener("click", () => {
     state.selected = null;
-    setDate(tz.dateInZone(Date.now(), ref().tz));
+    setDate(dateFor(Date.now()));
   });
   $("#date").addEventListener("change", (e) => setDate(e.target.value));
   $("#add-person").addEventListener("click", () => openPersonDialog());
 
   $("#share").addEventListener("click", () => {
     persist();
-    const url = new URL(location.href);
-    copyText(url.href, "Link copied. Anyone with it sees this team; names never reach a server.");
+    copyText(location.href, "Link copied. Anyone with it sees this exact view; names never reach a server.");
   });
 
   $("#grid").addEventListener("click", (event) => {
@@ -631,14 +825,13 @@ function setupEvents() {
     const person = state.people[index];
     if (button.dataset.action === "edit") openPersonDialog(index);
     if (button.dataset.action === "up") {
-      changeTeam(() => {
+      change(() => {
         [state.people[index - 1], state.people[index]] = [state.people[index], state.people[index - 1]];
       });
-      $(`button[data-action="up"][data-index="${index - 1}"]`)?.focus() ??
-        $(`button[data-action="edit"][data-index="0"]`)?.focus();
+      ($(`button[data-action="up"][data-index="${index - 1}"]`) ?? $(`button[data-action="edit"][data-index="0"]`))?.focus();
     }
     if (button.dataset.action === "remove") {
-      changeTeam(() => state.people.splice(index, 1));
+      change(() => state.people.splice(index, 1));
       toast(`Removed ${person.name}.`);
       $("#add-person").focus();
     }
@@ -650,18 +843,14 @@ function setupEvents() {
     if (!slot) return;
     const count = columns().length;
     const col = Number(slot.dataset.col);
-    const next = {
-      ArrowLeft: col - 1,
-      ArrowRight: col + 1,
-      Home: 0,
-      End: count - 1,
-    }[event.key];
+    const next = { ArrowLeft: col - 1, ArrowRight: col + 1, Home: 0, End: count - 1 }[event.key];
     if (next === undefined) return;
     event.preventDefault();
     const target = Math.min(count - 1, Math.max(0, next));
     selectColumn(target);
-    $(`.slot-button[data-col="${target}"]`)?.focus();
-    $(`.slot-button[data-col="${target}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const button = $(`.slot-button[data-col="${target}"]`);
+    button?.focus();
+    button?.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 
   $("#best").addEventListener("click", (event) => {
@@ -676,14 +865,13 @@ function setupEvents() {
     const text = [`${s.heading} (${tz.cityName(s.zone)} time)`, ...s.lines.map((l) => `• ${l.text}`)].join("\n");
     if (action === "copy") copyText(text, "Times copied.");
     if (action === "link") {
-      const fragment = tz.encodeState({ ...teamSnapshot(), at: s.start });
-      copyText(`${location.origin}${location.pathname}#${fragment}`, "Link to this time copied.");
+      copyText(`${location.origin}${location.pathname}#${fragment(s.start)}`, "Link to this time copied.");
     }
     if (action === "ics") {
       const ics = tz.toIcs({
         start: s.start,
         end: s.end,
-        summary: state.title || "Meeting",
+        summary: state.settings.title || "Meeting",
         description: text,
         uid: `${s.start}-${Math.random().toString(36).slice(2)}@timefriendzone`,
       });
@@ -704,19 +892,19 @@ function setupEvents() {
   });
 
   $("#restore-saved").addEventListener("click", () => {
-    const saved = readSaved();
-    if (saved) applyTeam(saved);
+    applyState(readSaved() ?? state.defaults);
     state.source = "saved";
     state.selected = null;
-    state.date = tz.dateInZone(Date.now(), ref().tz);
+    state.date = dateFor(Date.now());
     persist();
     render();
   });
 
   window.addEventListener("hashchange", () => {
-    if (location.hash.slice(1) === tz.encodeState(teamSnapshot())) return;
+    if (location.hash.slice(1) === fragment()) return;
     loadFromLocation();
     render();
+    scrollToFocusColumn();
   });
 
   // Keep clocks and the "now" marker current.

@@ -1,6 +1,14 @@
 {
-  "title": "",
-  "hour12": null,
+  "settings": {
+    "title": "",
+    "h": "auto",
+    "theme": "auto",
+    "font": "geist",
+    "from": "0",
+    "night": "22-7",
+    "hours": "9-17",
+    "days": "12345"
+  },
   "people": [
     { "name": "Me", "tz": "auto" },
     { "name": "Sam", "tz": "America/Los_Angeles", "hours": "8-16" },

@@ -11,8 +11,10 @@
     <meta name="color-scheme" content="light dark" />
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%230f766e'/><path d='M50 22v28l18 12' stroke='white' stroke-width='9' fill='none' stroke-linecap='round'/></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%234338ca'/><path d='M50 22v28l18 12' stroke='white' stroke-width='9' fill='none' stroke-linecap='round'/></svg>"
     />
+    <link rel="preload" href="fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/style.css" />
     <script type="module" src="js/app.js"></script>
   </head>
@@ -57,14 +59,14 @@
         <div class="legend" aria-hidden="true">
           <span><i class="swatch work"></i>Working hours</span>
           <span><i class="swatch off"></i>Awake</span>
-          <span><i class="swatch night"></i>Night (22–7)</span>
+          <span><i class="swatch night"></i><span id="legend-night">Night</span></span>
           <span><i class="swatch weekend"></i>Day off</span>
         </div>
         <div class="grid-scroll" id="grid-scroll">
           <table class="grid" id="grid"></table>
         </div>
         <p class="hint">
-          Pick an hour in the top row (arrow keys work too) to compare everyone's local time.
+          The top row counts who is working each hour. Pick an hour there (arrow keys work too) to compare everyone's local time.
         </p>
       </section>
 
@@ -73,8 +75,13 @@
 
     <footer class="footer">
       <p>
-        Free software under the GPL-3.0 licence. No accounts, cookies or tracking: your team lives in
-        the link (the part after <code>#</code> is never sent to any server) and in this browser.
+        <strong>Private by design.</strong> No accounts, cookies, analytics or third-party requests;
+        fonts are self-hosted. Your team and settings live in the link (the part after <code>#</code>
+        is never sent to any server) and, for your own team, in this browser's local storage.
+      </p>
+      <p>
+        Free software under the GPL-3.0 licence, set in Geist (SIL OFL). Inspired by World Time Buddy;
+        an independent project, not affiliated with it.
         <a id="source-link" href="https://github.com/" hidden>Source code</a>
       </p>
     </footer>
@@ -82,6 +89,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <datalist id="zones"></datalist>
+    <datalist id="locales"></datalist>
 
     <dialog id="person-dialog" aria-labelledby="person-dialog-title">
       <form id="person-form" method="dialog" novalidate>
@@ -102,20 +110,26 @@
           />
         </label>
         <p id="tz-hint" class="field-hint">For example “Berlin”, “San Francisco” or “Asia/Kolkata”.</p>
-        <fieldset class="field-row">
-          <legend>Working hours (their local time)</legend>
-          <label class="field">
-            <span>From</span>
-            <input type="time" name="start" step="900" required />
-          </label>
-          <label class="field">
-            <span>To</span>
-            <input type="time" name="end" step="900" required />
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>Working days</legend>
-          <div id="day-boxes" class="day-boxes"></div>
+        <label class="check">
+          <input type="checkbox" name="useDefault" />
+          <span id="team-default-label">Use the team default working hours</span>
+        </label>
+        <fieldset id="person-hours" class="plain">
+          <fieldset class="field-row">
+            <legend>Working hours (their local time)</legend>
+            <label class="field">
+              <span>From</span>
+              <input type="time" name="start" step="900" />
+            </label>
+            <label class="field">
+              <span>To</span>
+              <input type="time" name="end" step="900" />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Working days</legend>
+            <div id="day-boxes" class="day-boxes"></div>
+          </fieldset>
         </fieldset>
         <p id="person-error" class="error" role="alert"></p>
         <div class="dialog-actions">
@@ -125,31 +139,118 @@
       </form>
     </dialog>
 
-    <dialog id="settings-dialog" aria-labelledby="settings-dialog-title">
+    <dialog id="settings-dialog" class="wide" aria-labelledby="settings-dialog-title">
       <form id="settings-form" method="dialog">
         <h2 id="settings-dialog-title">Settings</h2>
-        <label class="field">
-          <span>Page title</span>
-          <input name="title" maxlength="120" placeholder="TimeFriendZone" />
-        </label>
-        <label class="field">
-          <span>Clock format</span>
-          <select name="hour12">
-            <option value="auto">Like my device</option>
-            <option value="24">24-hour (15:00)</option>
-            <option value="12">12-hour (3 pm)</option>
-          </select>
-        </label>
-        <div class="settings-buttons">
-          <button type="button" id="sort-team">Sort team by time zone</button>
-          <button type="button" id="export-team">Export team (JSON)</button>
-          <label class="button-like">
-            Import team (JSON)
-            <input type="file" id="import-team" accept="application/json,.json" class="sr-only" />
+        <p class="field-hint">
+          Changes apply immediately. Every setting is stored in the link, so a shared link looks the
+          same for everyone who opens it.
+        </p>
+
+        <fieldset>
+          <legend>Display</legend>
+          <label class="field">
+            <span>Page title</span>
+            <input name="title" maxlength="120" placeholder="TimeFriendZone" />
           </label>
-          <button type="button" id="reset-team" class="danger">Reset to default team</button>
-        </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Theme</span>
+              <select name="theme">
+                <option value="auto">Like my device</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Font</span>
+              <select name="font">
+                <option value="geist">Geist</option>
+                <option value="system">System</option>
+                <option value="serif">Serif</option>
+                <option value="mono">Monospace</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Clock</span>
+              <select name="hour12">
+                <option value="auto">Like the language</option>
+                <option value="24">24-hour (15:00)</option>
+                <option value="12">12-hour (3 pm)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Language for dates</span>
+              <input name="lang" list="locales" autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>Timeline starts at</span>
+              <select name="from"></select>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Hours</legend>
+          <div class="field-grid">
+            <label class="field">
+              <span>Night from</span>
+              <input type="time" name="nightStart" step="900" />
+            </label>
+            <label class="field">
+              <span>Night until</span>
+              <input type="time" name="nightEnd" step="900" />
+            </label>
+            <label class="field">
+              <span>Default work from</span>
+              <input type="time" name="workStart" step="900" />
+            </label>
+            <label class="field">
+              <span>Default work until</span>
+              <input type="time" name="workEnd" step="900" />
+            </label>
+          </div>
+          <fieldset>
+            <legend class="sub-legend">Default working days</legend>
+            <div id="work-day-boxes" class="day-boxes"></div>
+          </fieldset>
+        </fieldset>
+
+        <fieldset>
+          <legend>Colours</legend>
+          <div class="color-grid">
+            <label for="c-accent">Accent</label>
+            <input type="color" id="c-accent" name="accent" />
+            <button type="button" data-reset="accent">Default</button>
+            <label for="c-work">Working hours</label>
+            <input type="color" id="c-work" name="workColor" />
+            <button type="button" data-reset="workColor">Default</button>
+            <label for="c-awake">Awake</label>
+            <input type="color" id="c-awake" name="awakeColor" />
+            <button type="button" data-reset="awakeColor">Default</button>
+            <label for="c-night">Night</label>
+            <input type="color" id="c-night" name="nightColor" />
+            <button type="button" data-reset="nightColor">Default</button>
+          </div>
+          <p class="field-hint">Text colour adjusts automatically to stay readable.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Team</legend>
+          <div class="settings-buttons">
+            <button type="button" id="sort-team">Sort by time zone</button>
+            <button type="button" id="export-team">Export as config.json</button>
+            <label class="button-like">
+              Import JSON
+              <input type="file" id="import-team" accept="application/json,.json" class="sr-only" />
+            </label>
+            <button type="button" id="reset-settings">Reset settings</button>
+            <button type="button" id="reset-team" class="danger">Reset team</button>
+          </div>
+        </fieldset>
+
         <div class="dialog-actions">
+          <button type="button" id="copy-link">Copy link</button>
           <button type="submit" value="close" class="primary">Done</button>
         </div>
       </form>

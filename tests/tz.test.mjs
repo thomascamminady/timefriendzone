@@ -167,14 +167,13 @@ describe("parsing", () => {
 describe("URL state", () => {
   test("round trip", () => {
     const state = {
-      title: "Team Rocket & Friends",
+      settings: tz.parseSettings({ title: "Team Rocket & Friends", h: "12" }),
       people: [
         person({ name: "Zoë, the lead" }),
         person({ name: "Kenji", tz: "Asia/Tokyo", hours: "10-19" }),
         person({ name: "Noa", tz: "Asia/Jerusalem", days: "71234" }),
         person({ name: "Bot", tz: "UTC", days: "" }),
       ],
-      hour12: true,
       at: Date.UTC(2026, 9, 7, 13),
     };
     const fragment = tz.encodeState(state);
@@ -186,6 +185,11 @@ describe("URL state", () => {
     assert.equal(fragment, "p=Ada+Lovelace,Europe/Berlin");
   });
 
+  test("custom days without custom hours", () => {
+    const fragment = tz.encodeState({ people: [person({ name: "Noa", days: "71234" })] });
+    assert.equal(fragment, "p=Noa,Europe/Berlin,,12347");
+  });
+
   test("invalid entries are skipped", () => {
     const state = tz.decodeState("#p=Ok,UTC&p=Bad,Nowhere/Land&p=%E0%A4%A&junk");
     assert.deepEqual(
@@ -195,7 +199,103 @@ describe("URL state", () => {
   });
 
   test("empty fragment", () => {
-    assert.equal(tz.decodeState("").people, null);
+    const state = tz.decodeState("");
+    assert.equal(state.people, null);
+    assert.deepEqual(state.settings, tz.DEFAULT_SETTINGS);
+  });
+});
+
+describe("settings", () => {
+  test("every setting round-trips through the URL", () => {
+    const settings = tz.parseSettings({
+      title: "Ops",
+      h: "24",
+      theme: "dark",
+      lang: "de-DE",
+      font: "mono",
+      from: "6",
+      night: "23-6:30",
+      hours: "8:30-16:30",
+      days: "71234",
+      "c-accent": "#0F766E",
+      "c-work": "abc",
+      "c-awake": "ffffff",
+      "c-night": "222222",
+    });
+    assert.deepEqual(settings, {
+      title: "Ops",
+      hour12: false,
+      theme: "dark",
+      lang: "de-DE",
+      font: "mono",
+      from: 6,
+      nightStart: 23 * 60,
+      nightEnd: 6 * 60 + 30,
+      workStart: 8 * 60 + 30,
+      workEnd: 16 * 60 + 30,
+      workDays: "12347",
+      accent: "#0f766e",
+      workColor: "#aabbcc",
+      awakeColor: "#ffffff",
+      nightColor: "#222222",
+    });
+    const fragment = tz.encodeState({ settings, people: [] });
+    assert.deepEqual(tz.decodeState(fragment).settings, settings);
+  });
+
+  test("invalid values are ignored", () => {
+    const settings = tz.parseSettings({
+      theme: "neon",
+      font: "comic",
+      from: "25",
+      night: "late",
+      lang: "not a locale!!",
+      "c-accent": "red",
+      unknown: "x",
+    });
+    assert.deepEqual(settings, tz.DEFAULT_SETTINGS);
+  });
+
+  test("link settings override host defaults, and host defaults fill gaps", () => {
+    const host = tz.parseSettings({ title: "Host", "c-accent": "112233" });
+    const state = tz.decodeState("title=Link&p=A,UTC", "UTC", host);
+    assert.equal(state.settings.title, "Link");
+    assert.equal(state.settings.accent, "#112233");
+  });
+
+  test("a setting reset to the built-in default still overrides the host", () => {
+    const host = tz.parseSettings({ "c-accent": "112233" });
+    const fragment = tz.encodeState({ settings: tz.DEFAULT_SETTINGS, people: [] }, [
+      tz.DEFAULT_SETTINGS,
+      host,
+    ]);
+    assert.equal(tz.decodeState(fragment, "UTC", host).settings.accent, "");
+  });
+
+  test("configurable night and team default hours", () => {
+    const settings = tz.parseSettings({ night: "0-6", hours: "7-15", days: "123456" });
+    const p = person();
+    // Saturday 2026-07-04 10:00 Berlin: working with a six-day week.
+    assert.equal(tz.slotStatus(Date.UTC(2026, 6, 4, 8), p, settings).working, true);
+    // 23:00 is not night when night is 0–6.
+    assert.equal(tz.slotStatus(Date.UTC(2026, 6, 1, 21), p, settings).night, false);
+    assert.equal(tz.slotStatus(Date.UTC(2026, 6, 1, 2), p, settings).night, true);
+    // Personal hours beat the team default.
+    const own = person({ hours: "12-20" });
+    assert.equal(tz.slotStatus(Date.UTC(2026, 6, 1, 5), own, settings).working, false);
+  });
+
+  test("timeline can start at a later hour", () => {
+    const columns = tz.dayColumns("2026-07-01", "Europe/Berlin", 6 * 60);
+    assert.equal(columns.length, 24);
+    assert.equal(tz.zonedParts(columns[0], "Europe/Berlin").hour, 6);
+    assert.equal(tz.zonedParts(columns[23], "Europe/Berlin").day, 2);
+  });
+
+  test("readable text colour", () => {
+    assert.equal(tz.readableTextColor("#ffffff"), "#1c1917");
+    assert.equal(tz.readableTextColor("#1e1b4b"), "#ffffff");
+    assert.ok(tz.contrastRatio("#000000", "#ffffff") > 20);
   });
 });
 

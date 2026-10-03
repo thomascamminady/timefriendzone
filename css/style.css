@@ -1,26 +1,53 @@
+/* Geist and Geist Mono, SIL Open Font License 1.1 (see fonts/OFL.txt). */
+@font-face {
+  font-family: "Geist";
+  src: url("../fonts/geist-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../fonts/geist-latin-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../fonts/geist-mono-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Neutrals plus a single accent. Working hours use the accent, everything
+   else is a shade of grey. */
 :root {
-  --bg: #f6f6f2;
+  --bg: #fafaf9;
   --surface: #ffffff;
-  --text: #1b1f24;
-  --muted: #59616d;
-  --border: #d6d9d1;
-  --accent: #0f766e;
+  --text: #1c1917;
+  --muted: #6b6560;
+  --border: #e7e5e4;
+  --accent: #4338ca;
   --accent-text: #ffffff;
-  --accent-soft: #cdeee8;
-  --focus: #b45309;
-  --select: #b45309;
-  --now: #dc2626;
-  --danger: #b91c1c;
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  --focus: var(--accent);
+  --select: #1c1917;
+  --now: var(--accent);
+  --danger: #b42318;
 
-  --work-bg: #bfe8d4;
-  --work-text: #0a3a29;
-  --off-bg: #eceee7;
-  --off-text: #3a414c;
-  --night-bg: #2c3452;
-  --night-text: #dfe4f6;
-  --stripe: rgb(0 0 0 / 0.09);
+  --work-bg: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  --work-text: color-mix(in srgb, var(--accent) 70%, var(--text));
+  --off-bg: #ffffff;
+  --off-text: #44403c;
+  --night-bg: #eceae8;
+  --night-text: #78716c;
+  --stripe: rgb(28 25 23 / 0.06);
 
-  --radius: 10px;
+  --font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 12px;
   --cell-w: 2.85rem;
   --person-w: 14.5rem;
 
@@ -28,30 +55,65 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111317;
-    --surface: #1a1d22;
-    --text: #e8eaee;
-    --muted: #a4abb6;
-    --border: #323842;
-    --accent: #2dd4bf;
-    --accent-text: #052925;
-    --accent-soft: #134e48;
-    --focus: #fbbf24;
-    --select: #fbbf24;
-    --now: #f87171;
-    --danger: #f87171;
+  :root:not([data-theme="light"]) {
+    --bg: #0f0f10;
+    --surface: #171718;
+    --text: #f2f1ef;
+    --muted: #a19d98;
+    --border: #2b2a29;
+    --accent: #8b93ff;
+    --accent-text: #11113a;
+    --accent-soft: color-mix(in srgb, var(--accent) 28%, var(--surface));
+    --focus: var(--accent);
+    --select: #f2f1ef;
+    --now: var(--accent);
+    --danger: #ff8a80;
 
-    --work-bg: #1e5b44;
-    --work-text: #e4fff3;
-    --off-bg: #272c34;
-    --off-text: #cdd2da;
-    --night-bg: #0a0d18;
-    --night-text: #8e9ac4;
-    --stripe: rgb(255 255 255 / 0.07);
+    --work-bg: color-mix(in srgb, var(--accent) 28%, var(--surface));
+    --work-text: color-mix(in srgb, var(--accent) 25%, var(--text));
+    --off-bg: #171718;
+    --off-text: #d6d3d1;
+    --night-bg: #0c0c0d;
+    --night-text: #7a7570;
+    --stripe: rgb(255 255 255 / 0.05);
 
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f0f10;
+  --surface: #171718;
+  --text: #f2f1ef;
+  --muted: #a19d98;
+  --border: #2b2a29;
+  --accent: #8b93ff;
+  --accent-text: #11113a;
+  --accent-soft: color-mix(in srgb, var(--accent) 28%, var(--surface));
+  --focus: var(--accent);
+  --select: #f2f1ef;
+  --now: var(--accent);
+  --danger: #ff8a80;
+
+  --work-bg: color-mix(in srgb, var(--accent) 28%, var(--surface));
+  --work-text: color-mix(in srgb, var(--accent) 25%, var(--text));
+  --off-bg: #171718;
+  --off-text: #d6d3d1;
+  --night-bg: #0c0c0d;
+  --night-text: #7a7570;
+  --stripe: rgb(255 255 255 / 0.05);
+
+  color-scheme: dark;
+  }
+
+[data-font="system"] {
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+[data-font="serif"] {
+  --font: ui-serif, "Iowan Old Style", Charter, Georgia, serif;
+}
+[data-font="mono"] {
+  --font: var(--mono);
 }
 
 *,
@@ -68,13 +130,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font:
-    16px/1.5 system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font: 16px/1.5 var(--font);
   font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
@@ -330,8 +388,21 @@ section:focus {
 /* --------------------------------------------------------------- grid */
 
 .grid-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: max(24rem, calc(100vh - 12rem));
+  overscroll-behavior-x: contain;
   scrollbar-width: thin;
+}
+
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+}
+
+.grid thead .corner {
+  z-index: 4;
 }
 
 .grid {
@@ -379,7 +450,7 @@ section:focus {
 
 .person-name {
   overflow: hidden;
-  font-weight: 650;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -419,12 +490,6 @@ section:focus {
   font-weight: 600;
 }
 
-@media (prefers-color-scheme: light) {
-  .ref-tag {
-    color: #0b5f58;
-  }
-}
-
 .person-now {
   display: flex;
   align-items: baseline;
@@ -433,7 +498,7 @@ section:focus {
 }
 
 .clock {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .status::before {
@@ -456,13 +521,7 @@ section:focus {
 }
 
 .status-work {
-  color: #15803d;
-}
-
-@media (prefers-color-scheme: dark) {
-  .status-work {
-    color: #4ade80;
-  }
+  color: var(--accent);
 }
 
 .status-off,
@@ -492,6 +551,7 @@ section:focus {
 .cell.off {
   background: var(--off-bg);
   color: var(--off-text);
+  box-shadow: inset 0 0 0 0.5px var(--border);
 }
 
 .cell.night {
@@ -520,7 +580,7 @@ section:focus {
 
 .cell .hour {
   display: block;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .cell .sub {
@@ -550,7 +610,7 @@ section:focus {
 }
 
 .cell.daystart {
-  border-left: 2px solid var(--text);
+  border-left: 2px solid var(--muted);
 }
 
 .cell.now::after,
@@ -606,7 +666,7 @@ tbody tr:last-child .cell.selected {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  font-weight: 650;
+  font-weight: 600;
   overflow: hidden;
 }
 
@@ -621,17 +681,19 @@ tbody tr:last-child .cell.selected {
 .slot-button .count {
   position: relative;
   z-index: 1;
+  font-size: 0.85rem;
 }
 
 .slot-button .bar {
   position: absolute;
   inset: auto 3px 0;
-  height: calc(var(--level) * 100%);
+  height: calc(var(--level) * 70%);
   border-radius: 4px 4px 0 0;
   background: var(--accent-soft);
 }
 
 .slot.all .slot-button .bar {
+  height: 100%;
   background: var(--accent);
 }
 
@@ -639,9 +701,12 @@ tbody tr:last-child .cell.selected {
   color: var(--accent-text);
 }
 
-.slot.none .slot-button {
-  color: var(--muted);
-  font-weight: normal;
+.slot.none .slot-button::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--border);
 }
 
 .empty {
@@ -665,30 +730,27 @@ tbody tr:last-child .cell.selected {
 }
 
 .sel-list li {
+  font-variant-numeric: tabular-nums;
   display: grid;
   grid-template-columns: minmax(8rem, 14rem) 9rem minmax(7rem, 10rem) auto;
   align-items: center;
   gap: 0.25rem 1rem;
   padding: 0.45rem 0.75rem;
-  border-left: 5px solid var(--off-bg);
+  border-left: 4px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
 }
 
 .sel-list li.is-work {
-  border-left-color: var(--work-bg);
-}
-
-.sel-list li.is-night {
-  border-left-color: var(--night-bg);
+  border-left-color: var(--accent);
 }
 
 .sel-name {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .sel-time {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .sel-day,
@@ -911,4 +973,86 @@ legend {
   .footer {
     display: none;
   }
+}
+
+/* ---------------------------------------------------- dialog extras */
+
+dialog.wide {
+  width: min(40rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+dialog fieldset {
+  margin-bottom: 1rem;
+}
+
+dialog fieldset fieldset {
+  margin-bottom: 0.5rem;
+}
+
+fieldset.plain {
+  margin: 0;
+}
+
+fieldset:disabled {
+  opacity: 0.55;
+}
+
+.sub-legend {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0 0.75rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+}
+
+.check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  min-height: 0;
+  accent-color: var(--accent);
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 3.5rem auto;
+  align-items: center;
+  justify-content: start;
+  gap: 0.5rem 0.75rem;
+}
+
+.color-grid input[type="color"] {
+  width: 3.5rem;
+  height: 2.25rem;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.color-grid button {
+  min-height: 2.25rem;
+  padding-block: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.footer p {
+  margin: 0 0 0.5rem;
+  max-width: 60rem;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  min-width: 0;
 }
