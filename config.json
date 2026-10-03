@@ -4,17 +4,15 @@
     "h": "auto",
     "theme": "auto",
     "font": "geist",
+    "sort": "custom",
     "from": "0",
     "night": "22-7",
     "hours": "9-17",
     "days": "12345"
   },
   "people": [
-    { "name": "Me", "tz": "auto" },
-    { "name": "Sam", "tz": "America/Los_Angeles", "hours": "8-16" },
-    { "name": "Maria", "tz": "America/Sao_Paulo" },
-    { "name": "Ada", "tz": "Europe/London", "hours": "9:30-17:30" },
-    { "name": "Priya", "tz": "Asia/Kolkata", "hours": "10-18" },
-    { "name": "Kenji", "tz": "Asia/Tokyo", "hours": "10-19" }
+    { "name": "Me", "tz": "Europe/Berlin" },
+    { "name": "Atlanta", "tz": "America/New_York" },
+    { "name": "Bengaluru", "tz": "Asia/Kolkata" }
   ]
 }

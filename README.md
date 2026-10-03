@@ -4,6 +4,7 @@ See your colleagues' local times and working hours side by side, and find a meet
 
 It is a free-software alternative inspired by [World Time Buddy](https://www.worldtimebuddy.com/). It is built around **people** rather than cities, and you can host it yourself on GitHub Pages.
 
+- **Ahead or behind at a glance.** Every row is labelled with its offset from the reference zone, such as “6h behind” or “3h30 ahead”. You can sort rows west → east, east → west, by name, or keep your own order. ⌂ makes any person the reference.
 - **People first.** Each row is a colleague with their own working hours and working days. Sunday–Thursday weeks, six-day weeks and night shifts all work.
 - **Overlap at a glance.** The top row counts who is working in each hour. The app then names the best windows, for example "Everyone is working 15:00–17:00".
 - **Correct across DST.** It uses the browser's IANA time-zone database. Days with 22–26 hours, as well as half-hour and 45-minute offsets, are handled. The tests check every zone on every day of the year against an independent source.
@@ -34,6 +35,7 @@ https://<user>.github.io/timefriendzone/#title=Platform+Team&h=24&night=23-6&c-a
 | `lang` | `lang=de-DE` | Language/locale for dates and times | browser language |
 | `theme` | `theme=dark` | `auto`, `light` or `dark` | `auto` |
 | `font` | `font=system` | `geist`, `system`, `serif` or `mono` | `geist` |
+| `sort` | `sort=west` | Row order: `custom` (as listed), `west` (furthest behind first), `east` (furthest ahead first) or `name` | `custom` |
 | `from` | `from=6` | Hour (reference time) at which the timeline starts | `0` |
 | `night` | `night=23-6:30` | Hours shown as night | `22-7` |
 | `hours` | `hours=8:30-16:30` | Default working hours for people without their own | `9-17` |

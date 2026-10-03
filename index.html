@@ -56,11 +56,21 @@
           <h2 id="timeline-heading">Timeline</h2>
           <p id="best" class="best"></p>
         </div>
-        <div class="legend" aria-hidden="true">
-          <span><i class="swatch work"></i>Working hours</span>
-          <span><i class="swatch off"></i>Awake</span>
-          <span><i class="swatch night"></i><span id="legend-night">Night</span></span>
-          <span><i class="swatch weekend"></i>Day off</span>
+        <div class="timeline-tools">
+          <div class="legend" aria-hidden="true">
+            <span><i class="swatch work"></i>Working hours</span>
+            <span><i class="swatch off"></i>Awake</span>
+            <span><i class="swatch night"></i><span id="legend-night">Night</span></span>
+          </div>
+          <label class="sort-control">
+            Sort
+            <select id="sort-select">
+              <option value="custom">Your order</option>
+              <option value="west">West → east (behind first)</option>
+              <option value="east">East → west (ahead first)</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
         </div>
         <div class="grid-scroll" id="grid-scroll">
           <table class="grid" id="grid"></table>
@@ -75,13 +85,9 @@
 
     <footer class="footer">
       <p>
-        <strong>Private by design.</strong> No accounts, cookies, analytics or third-party requests;
-        fonts are self-hosted. Your team and settings live in the link (the part after <code>#</code>
-        is never sent to any server) and, for your own team, in this browser's local storage.
-      </p>
-      <p>
-        Free software under the GPL-3.0 licence, set in Geist (SIL OFL). Inspired by World Time Buddy;
-        an independent project, not affiliated with it.
+        No accounts, cookies, analytics or third-party requests. Your team lives in the link (the part
+        after <code>#</code> never reaches a server) and in this browser. · Free software, GPL-3.0 ·
+        Geist font, SIL OFL · Inspired by World Time Buddy, not affiliated ·
         <a id="source-link" href="https://github.com/thomascamminady/timefriendzone">Source code</a>
       </p>
     </footer>
@@ -182,6 +188,15 @@
             <label class="field">
               <span>Language for dates</span>
               <input name="lang" list="locales" autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>Sort people</span>
+              <select name="sort">
+                <option value="custom">Your order</option>
+                <option value="west">West → east</option>
+                <option value="east">East → west</option>
+                <option value="name">Name</option>
+              </select>
             </label>
             <label class="field">
               <span>Timeline starts at</span>

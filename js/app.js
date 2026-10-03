@@ -247,6 +247,7 @@ function renderHeader() {
   $("#date").value = state.date;
   $("#today").disabled = state.date === dateFor(Date.now());
   $("#shared-banner").hidden = state.source !== "link";
+  $("#sort-select").value = state.settings.sort;
 }
 
 function personHeader(person, index, now) {
@@ -266,15 +267,23 @@ function personHeader(person, index, now) {
           <button type="button" class="mini" data-action="edit" data-index="${index}" aria-label="Edit ${name}" title="Edit">✎</button>
           ${
             index > 0
-              ? `<button type="button" class="mini" data-action="up" data-index="${index}" aria-label="Move ${name} up${index === 1 ? " (makes them the reference time zone)" : ""}" title="Move up">↑</button>`
+              ? `<button type="button" class="mini" data-action="ref" data-index="${index}" aria-label="Use ${name}'s time zone as the reference" title="Use as reference">⌂</button>`
+              : ""
+          }
+          ${
+            index > 0 && state.settings.sort === "custom"
+              ? `<button type="button" class="mini" data-action="up" data-index="${index}" aria-label="Move ${name} up" title="Move up">↑</button>`
               : ""
           }
           <button type="button" class="mini" data-action="remove" data-index="${index}" aria-label="Remove ${name}" title="Remove">✕</button>
         </span>
       </div>
       <div class="person-meta">
-        ${escapeHtml(tz.cityName(person.tz))} · ${tz.formatOffset(offset)}${
-          index === 0 ? ` · <span class="ref-tag">reference</span>` : ` · ${tz.formatDiff(diff)}`
+        ${escapeHtml(tz.cityName(person.tz))} · <span class="offset">${tz.formatOffset(offset)}</span>
+        ${
+          index === 0
+            ? `<span class="lead reference">reference</span>`
+            : `<span class="lead ${diff > 0 ? "ahead" : diff < 0 ? "behind" : "same"}">${tz.formatLead(diff)}</span>`
         }
       </div>
       <div class="person-now">
@@ -318,8 +327,10 @@ function renderGrid() {
     })
     .join("");
 
-  const rows = people
-    .map((person, index) => {
+  const rows = tz
+    .sortOrder(people, state.settings.sort, now)
+    .map((index) => {
+      const person = people[index];
       const cells = cols
         .map((t, i) => {
           const status = tz.slotStatus(t, person, state.settings);
@@ -328,7 +339,6 @@ function renderGrid() {
           if (status.working) classes.push("work");
           else if (status.night) classes.push("night");
           else classes.push("off");
-          if (status.weekend) classes.push("weekend");
           const dayStart = parts.hour === 0 || i === 0;
           if (parts.hour === 0 && i > 0) classes.push("daystart");
           if (i === nowCol) classes.push("now");
@@ -389,7 +399,8 @@ function selectionSummary() {
   const start = state.selected;
   const end = start + tz.HOUR;
   const zone = ref().tz;
-  const lines = state.people.map((person) => {
+  const order = tz.sortOrder(state.people, state.settings.sort, start);
+  const lines = order.map((i) => state.people[i]).map((person) => {
     const status = tz.slotStatus(start, person, state.settings);
     return {
       person,
@@ -659,6 +670,7 @@ function fillSettingsForm() {
   form.elements.lang.placeholder = BROWSER_LOCALE;
   form.elements.theme.value = s.theme;
   form.elements.font.value = s.font;
+  form.elements.sort.value = s.sort;
   form.elements.from.value = String(s.from);
   form.elements.nightStart.value = tz.toTimeInput(s.nightStart);
   form.elements.nightEnd.value = tz.toTimeInput(s.nightEnd);
@@ -685,6 +697,7 @@ function readSettingsForm(changedField) {
     lang: lang === "" || tz.parseSettings({ lang }).lang === lang ? lang : s.lang,
     theme: value("theme"),
     font: value("font"),
+    sort: value("sort"),
     from: Number(value("from")),
     nightStart: minutes("nightStart", s.nightStart),
     nightEnd: minutes("nightEnd", s.nightEnd),
@@ -807,6 +820,11 @@ function setupEvents() {
   });
   $("#date").addEventListener("change", (e) => setDate(e.target.value));
   $("#add-person").addEventListener("click", () => openPersonDialog());
+  $("#sort-select").addEventListener("change", (e) => {
+    change(() => {
+      state.settings.sort = e.target.value;
+    });
+  });
 
   $("#share").addEventListener("click", () => {
     persist();
@@ -824,6 +842,13 @@ function setupEvents() {
     const index = Number(button.dataset.index);
     const person = state.people[index];
     if (button.dataset.action === "edit") openPersonDialog(index);
+    if (button.dataset.action === "ref") {
+      change(() => {
+        state.people.unshift(...state.people.splice(index, 1));
+      });
+      toast(`Times now shown relative to ${person.name} (${tz.cityName(person.tz)}).`);
+      $(`button[data-action="edit"][data-index="0"]`)?.focus();
+    }
     if (button.dataset.action === "up") {
       change(() => {
         [state.people[index - 1], state.people[index]] = [state.people[index], state.people[index - 1]];

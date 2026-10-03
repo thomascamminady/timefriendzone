@@ -214,6 +214,7 @@ describe("settings", () => {
       lang: "de-DE",
       font: "mono",
       from: "6",
+      sort: "east",
       night: "23-6:30",
       hours: "8:30-16:30",
       days: "71234",
@@ -229,6 +230,7 @@ describe("settings", () => {
       lang: "de-DE",
       font: "mono",
       from: 6,
+      sort: "east",
       nightStart: 23 * 60,
       nightEnd: 6 * 60 + 30,
       workStart: 8 * 60 + 30,
@@ -247,6 +249,7 @@ describe("settings", () => {
     const settings = tz.parseSettings({
       theme: "neon",
       font: "comic",
+      sort: "random",
       from: "25",
       night: "late",
       lang: "not a locale!!",
@@ -311,4 +314,33 @@ test("iCalendar export", () => {
   assert.match(ics, /DTSTART:20261007T130000Z\r\n/);
   assert.match(ics, /SUMMARY:Sync\\; weekly/);
   assert.match(ics, /DESCRIPTION:Line 1\\nLine 2/);
+});
+
+describe("ordering", () => {
+  const people = [
+    person({ name: "me", tz: "Europe/Berlin" }),
+    person({ name: "Bengaluru", tz: "Asia/Kolkata" }),
+    person({ name: "atlanta", tz: "America/New_York" }),
+    person({ name: "Ada", tz: "Europe/London" }),
+  ];
+  const t = Date.UTC(2026, 9, 3, 12);
+
+  test("custom keeps the given order", () => {
+    assert.deepEqual(tz.sortOrder(people, "custom", t), [0, 1, 2, 3]);
+  });
+
+  test("west to east and east to west", () => {
+    assert.deepEqual(tz.sortOrder(people, "west", t), [2, 3, 0, 1]);
+    assert.deepEqual(tz.sortOrder(people, "east", t), [1, 0, 3, 2]);
+  });
+
+  test("by name ignores case", () => {
+    assert.deepEqual(tz.sortOrder(people, "name", t), [3, 2, 1, 0]);
+  });
+
+  test("ahead and behind labels", () => {
+    assert.equal(tz.formatLead(0), "same time");
+    assert.equal(tz.formatLead(210), "3h30 ahead");
+    assert.equal(tz.formatLead(-360), "6h behind");
+  });
 });

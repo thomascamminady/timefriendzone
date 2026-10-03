@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   lang: "", // BCP 47 locale for dates and times, "" = the browser's
   font: "geist", // geist | system | serif | mono
   from: 0, // hour (reference time) at which the timeline starts
+  sort: "custom", // custom | west | east | name
   nightStart: 22 * 60,
   nightEnd: 7 * 60,
   workStart: 9 * 60, // default working hours for people without their own
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 export const THEMES = ["auto", "light", "dark"];
 export const FONTS = ["geist", "system", "serif", "mono"];
+export const SORTS = ["custom", "west", "east", "name"];
 
 const WEEKDAY = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
 
@@ -175,6 +177,24 @@ export function slotStatus(instant, person, settings = DEFAULT_SETTINGS) {
   return { parts, working, night, weekend: !isWorkday };
 }
 
+/**
+ * Display order (indices into `people`). "west" puts the zones furthest
+ * behind first, "east" the zones furthest ahead first; ties keep the
+ * custom order. Offsets are taken at `instant`.
+ */
+export function sortOrder(people, mode, instant) {
+  const order = people.map((_, i) => i);
+  if (mode === "west" || mode === "east") {
+    const sign = mode === "west" ? 1 : -1;
+    const offsets = people.map((p) => offsetMinutes(instant, p.tz));
+    order.sort((a, b) => sign * (offsets[a] - offsets[b]) || a - b);
+  } else if (mode === "name") {
+    const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+    order.sort((a, b) => collator.compare(people[a].name, people[b].name) || a - b);
+  }
+  return order;
+}
+
 /** Number of people within working hours for each column. */
 export function availability(columns, people, settings = DEFAULT_SETTINGS) {
   return columns.map(
@@ -243,6 +263,14 @@ export function fromTimeInput(value) {
   const match = /^(\d{1,2}):(\d{2})/.exec(value ?? "");
   if (!match) return null;
   return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/** Relative position of a zone: "same time", "3h30 ahead", "6h behind". */
+export function formatLead(minutes) {
+  if (minutes === 0) return "same time";
+  const [h, m] = hoursAndMinutes(minutes);
+  const amount = `${h}h${m ? String(m).padStart(2, "0") : ""}`;
+  return `${amount} ${minutes > 0 ? "ahead" : "behind"}`;
 }
 
 /** "9-17" or "08:30-17:15" → { start, end } in minutes, or null. */
@@ -334,6 +362,10 @@ export const SETTINGS_PARAMS = {
   font: {
     parse: (v) => (FONTS.includes(v) ? { font: v } : null),
     format: (s) => s.font,
+  },
+  sort: {
+    parse: (v) => (SORTS.includes(v) ? { sort: v } : null),
+    format: (s) => s.sort,
   },
   from: {
     parse: (v) => (parseHour(v) === null ? null : { from: parseHour(v) }),
