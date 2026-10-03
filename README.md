@@ -77,7 +77,7 @@ Everything in the table can also be changed in the **Settings** dialog, which ke
 
 ```sh
 python3 -m http.server 8000   # then open http://localhost:8000
-node --test tests/            # Node 20+, no dependencies
+node --test tests/*.test.mjs  # Node 20+, no dependencies
 ```
 
 - `js/tz.js` holds all time-zone, settings and URL logic. It has no DOM access.

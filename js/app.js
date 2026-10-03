@@ -918,13 +918,12 @@ function setupEvents() {
 }
 
 function setupSourceLink() {
-  // On https://<user>.github.io/<repo>/ link back to the repository.
+  // Forks served from https://<user>.github.io/<repo>/ link to their own repository.
   const match = /^([\w-]+)\.github\.io$/.exec(location.hostname);
   if (!match) return;
   const repo = location.pathname.split("/").filter(Boolean)[0] ?? `${match[1]}.github.io`;
   const link = $("#source-link");
   link.href = `https://github.com/${match[1]}/${repo}`;
-  link.hidden = false;
 }
 
 async function main() {
