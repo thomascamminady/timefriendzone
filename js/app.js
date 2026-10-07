@@ -236,6 +236,10 @@ function applyAppearance() {
 
   $("#legend-night").textContent =
     `Night (${tz.formatHM(s.nightStart)}–${tz.formatHM(s.nightEnd)})`;
+  const example = Date.UTC(2024, 0, 1, 15);
+  const { main, sub } = hourLabel({ hour: 15, minute: 0 });
+  $("#hint-example").textContent =
+    `${main}${sub} = ${fmtTime(example, "UTC")}–${fmtTime(example + tz.HOUR, "UTC")}`;
 }
 
 // ---------------------------------------------------------------- rendering
@@ -279,12 +283,8 @@ function personHeader(person, index, now) {
         </span>
       </div>
       <div class="person-meta">
-        ${escapeHtml(tz.cityName(person.tz))} · <span class="offset">${tz.formatOffset(offset)}</span>
-        ${
-          index === 0
-            ? `<span class="lead reference">reference</span>`
-            : `<span class="lead ${diff > 0 ? "ahead" : diff < 0 ? "behind" : "same"}">${tz.formatLead(diff)}</span>`
-        }
+        ${escapeHtml(tz.cityName(person.tz))} · ${tz.formatOffset(offset)} ·
+        <span class="lead">${index === 0 ? "reference" : tz.formatLead(diff)}</span>
       </div>
       <div class="person-now">
         <span class="clock">${escapeHtml(fmtTime(now, person.tz))}</span>
@@ -311,18 +311,18 @@ function renderGrid() {
     .map((t, i) => {
       const n = counts[i];
       const total = people.length;
-      const level = total === 0 ? 0 : n / total;
-      const label = `${fmtTime(t, refZone)} ${tz.cityName(refZone)}: ${n} of ${total} working`;
-      const classes = ["slot", total > 0 && n === total ? "all" : n > 0 ? "some" : "none"];
+      const all = total > 0 && n === total;
+      // Partial overlap tints the chip up to 45% of the accent; "all" is solid.
+      const level = total === 0 ? 0 : Math.round((n / total) * 45);
+      const label = `${fmtTime(t, refZone)}–${fmtTime(t + tz.HOUR, refZone)} ${tz.cityName(refZone)}: ${n} of ${total} working`;
+      const classes = ["slot"];
+      if (all) classes.push("all");
       if (i === nowCol) classes.push("now");
       if (i === selectedCol) classes.push("selected");
-      const text = total > 0 && n === total ? "All" : n > 0 ? String(n) : "";
       return `<th scope="col" class="${classes.join(" ")}"${i === nowCol ? nowStyle : ""}>
         <button type="button" class="slot-button" data-col="${i}" tabindex="${i === focusCol ? 0 : -1}"
-          aria-pressed="${i === selectedCol}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
-          <span class="bar" aria-hidden="true" style="--level:${level}"></span>
-          <span class="count" aria-hidden="true">${text}</span>
-        </button>
+          style="--level:${level}%" aria-pressed="${i === selectedCol}" aria-label="${escapeHtml(label)}"
+          title="${escapeHtml(label)}"><span aria-hidden="true">${all ? "All" : n > 0 ? n : ""}</span></button>
       </th>`;
     })
     .join("");
@@ -344,9 +344,9 @@ function renderGrid() {
           if (i === nowCol) classes.push("now");
           if (i === selectedCol) classes.push("selected");
           const { main, sub } = hourLabel(parts);
-          return `<td class="${classes.join(" ")}"${i === nowCol ? nowStyle : ""}>${
-            dayStart ? `<span class="day">${escapeHtml(fmtShortDay(t, person.tz))}</span>` : ""
-          }<span class="hour">${main}</span><span class="sub">${sub}</span><span class="sr-only">, ${statusText(status)}</span></td>`;
+          const day = dayStart ? escapeHtml(fmtShortDay(t, person.tz)) : "";
+          const range = `${fmtTime(t, person.tz)}–${fmtTime(t + tz.HOUR, person.tz)}, ${statusText(status)}`;
+          return `<td class="${classes.join(" ")}"${i === nowCol ? nowStyle : ""} title="${escapeHtml(range)}"><span class="day">${day}</span><span class="hour">${main}</span><span class="sub">${sub}</span><span class="sr-only">, ${statusText(status)}</span></td>`;
         })
         .join("");
       return `<tr>${personHeader(person, index, now)}${cells}</tr>`;

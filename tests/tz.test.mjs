@@ -19,9 +19,6 @@ describe("offsets", () => {
     assert.equal(tz.formatOffset(0), "UTC");
     assert.equal(tz.formatOffset(330), "UTC+5:30");
     assert.equal(tz.formatOffset(-180), "UTC−3");
-    assert.equal(tz.formatDiff(0), "same time");
-    assert.equal(tz.formatDiff(-270), "−4h30");
-    assert.equal(tz.formatDiff(360), "+6h");
   });
 });
 

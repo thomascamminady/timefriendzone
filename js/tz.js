@@ -239,14 +239,6 @@ export function formatOffset(minutes) {
   return `UTC${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
 }
 
-/** Relative difference between two zones: "same time", "+6h", "−4h30". */
-export function formatDiff(minutes) {
-  if (minutes === 0) return "same time";
-  const [h, m] = hoursAndMinutes(minutes);
-  const sign = minutes > 0 ? "+" : "−";
-  return `${sign}${h}h${m ? String(m).padStart(2, "0") : ""}`;
-}
-
 /** 540 → "9", 510 → "8:30". */
 export function formatHM(minutes) {
   const [h, m] = hoursAndMinutes(minutes);

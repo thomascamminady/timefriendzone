@@ -52,16 +52,9 @@
       </div>
 
       <section id="timeline" aria-labelledby="timeline-heading" tabindex="-1">
+        <h2 id="timeline-heading" class="sr-only">Timeline</h2>
         <div class="section-head">
-          <h2 id="timeline-heading">Timeline</h2>
           <p id="best" class="best"></p>
-        </div>
-        <div class="timeline-tools">
-          <div class="legend" aria-hidden="true">
-            <span><i class="swatch work"></i>Working hours</span>
-            <span><i class="swatch off"></i>Awake</span>
-            <span><i class="swatch night"></i><span id="legend-night">Night</span></span>
-          </div>
           <label class="sort-control">
             Sort
             <select id="sort-select">
@@ -75,9 +68,15 @@
         <div class="grid-scroll" id="grid-scroll">
           <table class="grid" id="grid"></table>
         </div>
-        <p class="hint">
-          The top row counts who is working each hour. Pick an hour there (arrow keys work too) to compare everyone's local time.
-        </p>
+        <div class="legend">
+          <span aria-hidden="true"><i class="swatch work"></i>Working hours</span>
+          <span aria-hidden="true"><i class="swatch off"></i>Awake</span>
+          <span aria-hidden="true"><i class="swatch night"></i><span id="legend-night">Night</span></span>
+          <p class="hint">
+            Each box is the hour starting at its label (<span id="hint-example">15 = 15:00–16:00</span>). The top row counts who is
+            working; pick an hour there to compare everyone's local time.
+          </p>
+        </div>
       </section>
 
       <section id="selection" class="selection" aria-labelledby="selection-heading"></section>
